@@ -3,7 +3,7 @@
 =============================================================================
 MODULE: fetch.py
 TYPE: Data Provider
-PURPOSE: Fetch historical stock data with VCI/KBS fallback logic
+PURPOSE: Fetch historical stock data with VCI/KBS fallback logic and GMT+7 time
 GOVERNANCE: Stable
 LAST UPDATED: 2026-08-14
 =============================================================================
@@ -11,12 +11,15 @@ LAST UPDATED: 2026-08-14
 
 import pandas as pd
 import streamlit as st
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 try:
     from vnstock_data import Quote
 except ImportError:
     from vnstock.api.quote import Quote
+
+# Múi giờ Việt Nam (GMT+7)
+vn_tz = timezone(timedelta(hours=7))
 
 @st.cache_data(ttl=300)  # Cache trong 5 phút
 def fetch_stock_data(symbol: str, timeframe: str) -> dict:
@@ -27,7 +30,7 @@ def fetch_stock_data(symbol: str, timeframe: str) -> dict:
     elif timeframe == "D":
         timeframe = "1D"
         
-    today = datetime.now()
+    today = datetime.now(vn_tz)
     
     # Tối ưu hóa: Nếu là khung 5m hoặc 15m, chỉ tải 3 tháng để tránh quá nặng
     if timeframe in ["5m", "15m"]:
@@ -49,11 +52,11 @@ def fetch_stock_data(symbol: str, timeframe: str) -> dict:
             df = q.history(start=start_date, end=end_date, interval=interval)
         except Exception as e_kbs:
             st.error(f"Lỗi tải dữ liệu cho mã {symbol} từ cả VCI ({e_vci}) và KBS ({e_kbs})")
-            return {"df": pd.DataFrame(), "fetch_time": datetime.now()}
+            return {"df": pd.DataFrame(), "fetch_time": datetime.now(vn_tz)}
             
     try:
         if df is None or df.empty:
-            return {"df": pd.DataFrame(), "fetch_time": datetime.now()}
+            return {"df": pd.DataFrame(), "fetch_time": datetime.now(vn_tz)}
             
         # Đảm bảo cột thời gian là datetime
         df['time'] = pd.to_datetime(df['time'])
@@ -66,7 +69,7 @@ def fetch_stock_data(symbol: str, timeframe: str) -> dict:
         df['close'] = df['close'].astype(float)
         df['volume'] = df['volume'].astype(float)
         
-        return {"df": df, "fetch_time": datetime.now()}
+        return {"df": df, "fetch_time": datetime.now(vn_tz)}
     except Exception as e:
         st.error(f"Lỗi xử lý dữ liệu cho mã {symbol}: {e}")
-        return {"df": pd.DataFrame(), "fetch_time": datetime.now()}
+        return {"df": pd.DataFrame(), "fetch_time": datetime.now(vn_tz)}
