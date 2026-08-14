@@ -3,7 +3,7 @@
 =============================================================================
 MODULE: app.py
 TYPE: Web Application
-PURPOSE: Multi-period VWAP and ZigZag chart application for Vietnamese stocks
+PURPOSE: Streamlit UI and layout for Multi-period VWAP and ZigZag chart
 GOVERNANCE: Stable
 LAST UPDATED: 2026-08-14
 =============================================================================
@@ -14,19 +14,21 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+import os
 import sys
+
+# Thêm thư mục chứa file app.py vào python path để đảm bảo import được các module con
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+# Import các modules phụ đã được tách biệt
+from data.fetch import fetch_stock_data
+from indicators.vwap import calculate_vwap
+from indicators.zigzag import calculate_zigzag
 
 # Thiết lập bảng mã UTF-8 cho stdout trên Windows
 sys.stdout.reconfigure(encoding='utf-8')
-
-# Thêm src vào sys.path nếu cần thiết
-sys.path.insert(0, 'src')
-
-# Import vnstock
-try:
-    from vnstock_data import Quote
-except ImportError:
-    from vnstock.api.quote import Quote
 
 # Cấu hình trang Streamlit
 st.set_page_config(
@@ -36,7 +38,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Thêm CSS tùy chỉnh ép nền trắng và chữ đen (Tránh lỗi không thấy gì do theme hệ thống)
+# Thêm CSS tùy chỉnh ép nền trắng, chữ đen và tự co giãn chiều cao biểu đồ theo thiết bị
 st.markdown("""
 <style>
     /* Ép Streamlit dùng nền trắng và chữ tối màu */
@@ -108,285 +110,21 @@ st.markdown("""
         font-weight: 700 !important;
         color: #1B5E20 !important;
     }
+    
+    /* Tự động co giãn chiều cao biểu đồ: 420px cho mobile, 580px cho desktop */
+    .stPlotlyChart {
+        height: 580px !important;
+    }
+    @media (max-width: 768px) {
+        .stPlotlyChart {
+            height: 420px !important;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# 1. HÀM TẢI DỮ LIỆU TỪ VNSTOCK (CÓ CACHE)
-# ---------------------------------------------------------------------------
-@st.cache_data(ttl=300)  # Cache trong 5 phút
-def fetch_stock_data(symbol: str, timeframe: str) -> dict:
-    """Tải dữ liệu lịch sử giá từ vnstock."""
-    symbol = symbol.upper().strip()
-    if timeframe == "H1":
-        timeframe = "1H"
-    elif timeframe == "D":
-        timeframe = "1D"
-        
-    today = datetime.now()
-    
-    # Tối ưu hóa: Nếu là khung 5m hoặc 15m, chỉ tải 3 tháng để tránh quá nặng
-    if timeframe in ["5m", "15m"]:
-        start_date = (today - timedelta(days=90)).strftime("%Y-%m-%d")
-    else:
-        start_date = (today - timedelta(days=365)).strftime("%Y-%m-%d") # 12 tháng
-        
-    end_date = today.strftime("%Y-%m-%d")
-    interval = timeframe # "5m", "15m", "1H", or "1D"
-    
-    try:
-        # Sử dụng nguồn VCI trước (nhanh và ổn định cho lịch sử)
-        q = Quote(symbol=symbol, source='VCI')
-        df = q.history(start=start_date, end=end_date, interval=interval)
-    except Exception as e_vci:
-        # Nếu VCI bị chặn kết nối ở Cloud, tự động fallback sang KBS làm dự phòng
-        try:
-            q = Quote(symbol=symbol, source='kbs')
-            df = q.history(start=start_date, end=end_date, interval=interval)
-        except Exception as e_kbs:
-            st.error(f"Lỗi tải dữ liệu cho mã {symbol} từ cả VCI ({e_vci}) và KBS ({e_kbs})")
-            return {"df": pd.DataFrame(), "fetch_time": datetime.now()}
-            
-    try:
-        if df is None or df.empty:
-            return {"df": pd.DataFrame(), "fetch_time": datetime.now()}
-            
-        # Đảm bảo cột thời gian là datetime
-        df['time'] = pd.to_datetime(df['time'])
-        df = df.sort_values('time').reset_index(drop=True)
-        
-        # Chuyển đổi tên các cột sang kiểu chuẩn để dễ xử lý
-        df['open'] = df['open'].astype(float)
-        df['high'] = df['high'].astype(float)
-        df['low'] = df['low'].astype(float)
-        df['close'] = df['close'].astype(float)
-        df['volume'] = df['volume'].astype(float)
-        
-        return {"df": df, "fetch_time": datetime.now()}
-    except Exception as e:
-        st.error(f"Lỗi xử lý dữ liệu cho mã {symbol}: {e}")
-        return {"df": pd.DataFrame(), "fetch_time": datetime.now()}
-
-# ---------------------------------------------------------------------------
-# 2. TÍNH TOÁN CÁC ĐƯỜNG VWAP ĐA KHUNG THỜI GIAN
-# ---------------------------------------------------------------------------
-def calculate_vwap(df: pd.DataFrame, period_type: str, price_source: str, break_lines: bool, skip_last_bar: bool) -> pd.Series:
-    """
-    Tính toán VWAP đa chu kỳ với tùy chọn ngắt kết nối tại ranh giới chu kỳ
-    và ẩn giá trị tại nến hiện tại (forming bar).
-    """
-    n = len(df)
-    if n == 0:
-        return pd.Series(dtype=float)
-        
-    # Tính toán Giá Nguồn (Price Source)
-    if price_source == "Typical (HLC3)":
-        price = (df['high'] + df['low'] + df['close']) / 3.0
-    elif price_source == "Weighted (OHLC4)":
-        price = (df['open'] + df['high'] + df['low'] + df['close']) / 4.0
-    elif price_source == "Median (HL2)":
-        price = (df['high'] + df['low']) / 2.0
-    else:  # Close
-        price = df['close']
-        
-    vol = df['volume']
-    
-    # Xác định khóa chu kỳ (Period Key)
-    times = df['time']
-    if period_type == "Session/Day": # 1 Ngày
-        keys = times.dt.date
-    elif period_type == "Week": # 1 Tuần
-        keys = times.dt.to_period('W').dt.start_time
-    elif period_type == "Month": # 1 Tháng
-        keys = times.dt.to_period('M').dt.start_time
-    elif period_type == "Quarter": # 3 Tháng
-        keys = times.dt.to_period('Q').dt.start_time
-    elif period_type == "Year": # 12 Tháng / Năm
-        keys = times.dt.to_period('Y').dt.start_time
-    else:
-        keys = pd.Series([0] * n)
-        
-    # Tính toán Tích lũy tích và Tích lũy khối lượng
-    tpv = price * vol
-    
-    cum_vol = vol.groupby(keys).cumsum()
-    cum_tpv = tpv.groupby(keys).cumsum()
-    
-    vwap = cum_tpv / (cum_vol + 1e-10)
-    
-    # Tạo đứt đoạn tại ranh giới (Break lines at period boundaries)
-    if break_lines and n > 1:
-        # Xác định các điểm thay đổi chu kỳ
-        is_boundary = keys != keys.shift(1)
-        is_boundary.iloc[0] = False  # Bỏ qua dòng đầu tiên
-        
-        # MQL5 style: Gán nến đầu tiên của kỳ mới bằng NaN để ngắt kết nối
-        vwap = vwap.copy()
-        vwap.loc[is_boundary] = np.nan
-        
-    # Ẩn nến cuối cùng (Forming bar)
-    if skip_last_bar and n > 0:
-        vwap.iloc[-1] = np.nan
-        
-    return vwap
-
-# ---------------------------------------------------------------------------
-# 3. TÍNH TOÁN CHỈ BÁO ZIGZAG (DỊCH TỪ MQL5)
-# ---------------------------------------------------------------------------
-def calculate_zigzag(df: pd.DataFrame, depth: int = 12, deviation: float = 5.0, backstep: int = 3, deviation_type: str = "Percent") -> pd.Series:
-    """
-    Thuật toán ZigZag dịch chuẩn xác từ phiên bản MQL5.
-    Trả về Series chứa giá trị đỉnh/đáy, các điểm khác bằng NaN.
-    """
-    n = len(df)
-    zigzag = np.zeros(n)
-    
-    if n < depth:
-        return pd.Series([np.nan] * n)
-        
-    highs = df['high'].values
-    lows = df['low'].values
-    
-    high_map = np.zeros(n)
-    low_map = np.zeros(n)
-    
-    last_low = 0.0
-    last_high = 0.0
-    
-    # 1. Tìm các đỉnh/đáy cực trị ban đầu
-    for shift in range(depth, n):
-        # Khoảng tìm kiếm từ [shift - depth + 1] đến [shift]
-        low_window = lows[shift - depth + 1 : shift + 1]
-        min_val = np.min(low_window)
-        min_idx = shift - depth + 1 + np.argmin(low_window)
-        
-        high_window = highs[shift - depth + 1 : shift + 1]
-        max_val = np.max(high_window)
-        max_idx = shift - depth + 1 + np.argmax(high_window)
-        
-        # --- Tính Đáy (Low Extreme) ---
-        if min_val == last_low:
-            val_low = 0.0
-        else:
-            last_low = min_val
-            
-            # Tính giới hạn sai số (Deviation)
-            if deviation_type == "Percent":
-                dev_limit = (lows[shift] * deviation) / 100.0
-            else:  # Absolute
-                dev_limit = deviation
-                
-            if (lows[shift] - min_val) > dev_limit:
-                val_low = 0.0
-            else:
-                # Kiểm tra Backstep: loại bỏ đỉnh/đáy cũ cao hơn trong phạm vi backstep
-                for back in range(1, backstep + 1):
-                    prev_idx = shift - back
-                    if prev_idx >= 0:
-                        res = low_map[prev_idx]
-                        if res != 0.0 and res > min_val:
-                            low_map[prev_idx] = 0.0
-                val_low = min_val
-                
-        if lows[shift] == val_low:
-            low_map[shift] = val_low
-        else:
-            low_map[shift] = 0.0
-            
-        # --- Tính Đỉnh (High Extreme) ---
-        if max_val == last_high:
-            val_high = 0.0
-        else:
-            last_high = max_val
-            
-            # Tính giới hạn sai số (Deviation)
-            if deviation_type == "Percent":
-                dev_limit = (highs[shift] * deviation) / 100.0
-            else:  # Absolute
-                dev_limit = deviation
-                
-            if (max_val - highs[shift]) > dev_limit:
-                val_high = 0.0
-            else:
-                # Kiểm tra Backstep: loại bỏ đỉnh/đáy cũ thấp hơn trong phạm vi backstep
-                for back in range(1, backstep + 1):
-                    prev_idx = shift - back
-                    if prev_idx >= 0:
-                        res = high_map[prev_idx]
-                        if res != 0.0 and res < max_val:
-                            high_map[prev_idx] = 0.0
-                val_high = max_val
-                
-        if highs[shift] == val_high:
-            high_map[shift] = val_high
-        else:
-            high_map[shift] = 0.0
-
-    # 2. Quy trình chọn lọc đỉnh/đáy luân phiên cuối cùng (State Machine)
-    # 0 = Extremum (Bắt đầu), 1 = Peak (Tìm đỉnh tiếp theo), -1 = Bottom (Tìm đáy tiếp theo)
-    extreme_search = 0  
-    last_low = 0.0
-    last_high = 0.0
-    last_low_pos = 0
-    last_high_pos = 0
-    
-    for shift in range(depth, n):
-        val_low = low_map[shift]
-        val_high = high_map[shift]
-        
-        if extreme_search == 0:  # Định vị điểm cực trị đầu tiên
-            if last_low == 0.0 and last_high == 0.0:
-                if val_high != 0.0:
-                    last_high = highs[shift]
-                    last_high_pos = shift
-                    extreme_search = -1  # Đã có đỉnh, tìm đáy tiếp theo
-                    zigzag[shift] = last_high
-                elif val_low != 0.0:
-                    last_low = lows[shift]
-                    last_low_pos = shift
-                    extreme_search = 1   # Đã có đáy, tìm đỉnh tiếp theo
-                    zigzag[shift] = last_low
-                    
-        elif extreme_search == 1:  # Đang tìm Đỉnh
-            # Nếu thấy đáy mới thấp hơn nữa khi chưa tìm thấy đỉnh
-            if val_low != 0.0 and val_low < last_low and val_high == 0.0:
-                zigzag[last_low_pos] = 0.0  # Hủy đáy cũ
-                last_low_pos = shift
-                last_low = val_low
-                zigzag[shift] = last_low
-                
-            # Nếu thấy đỉnh hợp lệ
-            if val_high != 0.0 and val_low == 0.0:
-                last_high = val_high
-                last_high_pos = shift
-                zigzag[shift] = last_high
-                extreme_search = -1  # Đổi trạng thái sang tìm Đáy tiếp theo
-                
-        elif extreme_search == -1:  # Đang tìm Đáy
-            # Nếu thấy đỉnh mới cao hơn nữa khi chưa tìm thấy đáy
-            if val_high != 0.0 and val_high > last_high and val_low == 0.0:
-                zigzag[last_high_pos] = 0.0  # Hủy đỉnh cũ
-                last_high_pos = shift
-                last_high = val_high
-                zigzag[shift] = last_high
-                
-            # Nếu thấy đáy hợp lệ
-            if val_low != 0.0 and val_high == 0.0:
-                last_low = val_low
-                last_low_pos = shift
-                zigzag[shift] = last_low
-                extreme_search = 1   # Đổi trạng thái sang tìm Đỉnh tiếp theo
-
-    # 3. Chuyển kết quả sang định dạng Pandas Series (các điểm cực trị là giá trị, các điểm khác là NaN)
-    zigzag_series = pd.Series([np.nan] * n)
-    for i in range(n):
-        if zigzag[i] != 0.0:
-            zigzag_series.iloc[i] = zigzag[i]
-            
-    return zigzag_series
-
-# ---------------------------------------------------------------------------
-# 4. GIAO DIỆN CHÍNH (ĐÃ DI CHUYỂN BỘ ĐIỀU KHIỂN LÊN TRANG CHÍNH CHO DI ĐỘNG)
+# GIAO DIỆN CHÍNH
 # ---------------------------------------------------------------------------
 st.markdown('<div class="main-title">📈 VN Stock Chart</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">Biểu đồ Line Price tích hợp Multi-Period VWAP và ZigZag tương thích Di động</div>', unsafe_allow_html=True)
@@ -598,6 +336,7 @@ if selected_stock:
         # --- Định cấu hình Layout Nền Trắng (plotly_white) ---
         fig.update_layout(
             template='plotly_white',
+            dragmode=False, # Tắt zoom/pan kéo thả bằng tay trên màn hình điện thoại để tránh bị kẹt trang
             title=dict(
                 text=f"Biểu đồ phân tích kỹ thuật {selected_stock} ({tf_code}) - Lịch sử {display_range}",
                 font=dict(size=16, color='#212121')
@@ -625,14 +364,17 @@ if selected_stock:
                 font=dict(size=10, color='#212121')
             ),
             margin=dict(l=10, r=10, t=80, b=10),
-            height=600,
             hovermode="x unified",
             paper_bgcolor="#FFFFFF",
             plot_bgcolor="#FFFFFF"
         )
         
-        # Hiển thị đồ thị co giãn tự động theo chiều ngang
-        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+        # Hiển thị đồ thị co giãn tự động theo chiều ngang, cấu hình tắt hoàn toàn các thanh bar và zoom
+        st.plotly_chart(
+            fig, 
+            use_container_width=True, 
+            config={'displayModeBar': False, 'scrollZoom': False, 'doubleClick': False}
+        )
 
         # --- Chân trang chú thích sử dụng ---
         st.markdown("""
