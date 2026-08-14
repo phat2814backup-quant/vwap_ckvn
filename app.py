@@ -334,8 +334,8 @@ if selected_stock:
         # Cấu hình rangebreaks để ẩn các ngày nghỉ cuối tuần, giờ nghỉ đêm và nghỉ trưa
         rbreaks = [dict(bounds=["sat", "mon"])]
         if tf_code in ["1H", "15m", "5m"]:
-            rbreaks.append(dict(bounds=[14.75, 9.0], pattern="hour"))      # Đêm: 15h00 đến 08h30 sáng hôm sau
-            rbreaks.append(dict(bounds=[11.5, 13.0], pattern="hour"))   # Trưa: 11h36 đến 12h54 trưa cùng ngày
+            rbreaks.append(dict(bounds=[15.0, 8.5], pattern="hour"))      # Đêm: 15h00 đến 08h30 sáng hôm sau
+            rbreaks.append(dict(bounds=[11.6, 12.9], pattern="hour"))   # Trưa: 11h36 đến 12h54 trưa cùng ngày
 
         # --- Định cấu hình Layout Nền Trắng (plotly_white) ---
         fig.update_layout(
