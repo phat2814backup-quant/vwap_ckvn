@@ -28,7 +28,11 @@ from indicators.vwap import calculate_vwap
 from indicators.zigzag import calculate_zigzag
 
 # Thiết lập bảng mã UTF-8 cho stdout trên Windows
-sys.stdout.reconfigure(encoding='utf-8')
+if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
 
 # Cấu hình trang Streamlit
 st.set_page_config(
