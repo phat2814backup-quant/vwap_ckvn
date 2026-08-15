@@ -124,13 +124,13 @@ st.markdown("""
         color: #1B5E20 !important;
     }
 
-    /* Tự động co giãn chiều cao biểu đồ: 380px cho mobile, 580px cho desktop để không cần cuộn dọc */
+    /* Tự động co giãn chiều cao biểu đồ: 320px cho mobile, 500px cho desktop để không cần cuộn dọc */
     .stPlotlyChart {
-        height: 580px !important;
+        height: 500px !important;
     }
     @media (max-width: 768px) {
         .stPlotlyChart {
-            height: 380px !important;
+            height: 320px !important;
         }
         
         /* Giảm padding tối đa trên mobile */
@@ -374,7 +374,7 @@ if selected_stock:
                 rows=3, cols=1,
                 shared_xaxes=True,
                 vertical_spacing=0.04,
-                row_heights=[0.60, 0.15, 0.25]
+                row_heights=[0.70, 0.15, 0.15]
             )
             vol_row = 2
             mbfx_row = 3
@@ -448,23 +448,12 @@ if selected_stock:
 
         # 5. Thêm phần MBFX Timing bên dưới cùng (nếu được chọn)
         if show_mbfx and 'mbfx' in df_plot.columns:
-            # Xác định màu sắc chấm tròn cho MBFX dựa trên ColorIdx: 0->Lime, 1->Red, 2->Gold
-            mbfx_colors = []
-            for c in df_plot['mbfx_color']:
-                if c == 0:
-                    mbfx_colors.append('#00E676')  # Lime
-                elif c == 1:
-                    mbfx_colors.append('#FF1744')  # Red
-                else:
-                    mbfx_colors.append('#FFC107')  # Gold
-
             fig.add_trace(go.Scatter(
                 x=df_plot['time_str'],
                 y=df_plot['mbfx'],
-                mode='lines+markers',
+                mode='lines',
                 name='MBFX Timing',
-                line=dict(color='#9E9E9E', width=1.5),
-                marker=dict(color=mbfx_colors, size=5),
+                line=dict(color='#1E88E5', width=1.5),  # Màu xanh dương của chỉ báo gốc
                 hovertemplate='%{x}<br>MBFX: %{y:.2f}<extra></extra>'
             ), row=mbfx_row, col=1)
 
