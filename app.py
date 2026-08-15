@@ -117,13 +117,62 @@ st.markdown("""
         color: #1B5E20 !important;
     }
 
-    /* Tự động co giãn chiều cao biểu đồ: 480px cho mobile, 680px cho desktop */
+    /* Tự động co giãn chiều cao biểu đồ: 350px cho mobile, 680px cho desktop */
     .stPlotlyChart {
         height: 680px !important;
     }
     @media (max-width: 768px) {
         .stPlotlyChart {
-            height: 480px !important;
+            height: 350px !important;
+        }
+        
+        /* Giảm padding để tiết kiệm diện tích trên mobile */
+        .block-container {
+            padding-top: 0.3rem !important;
+            padding-bottom: 0.3rem !important;
+            padding-left: 0.4rem !important;
+            padding-right: 0.4rem !important;
+        }
+        
+        .main-title {
+            font-size: 1.2rem !important;
+            margin-bottom: 0.1rem !important;
+        }
+        
+        .sub-title {
+            font-size: 0.7rem !important;
+            margin-bottom: 0.4rem !important;
+        }
+        
+        /* Giữ các cột của st.columns nằm hàng ngang trên mobile thay vì xếp chồng đứng */
+        div[data-testid="stHorizontalBlock"] {
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            gap: 4px !important;
+        }
+        
+        div[data-testid="column"] {
+            width: unset !important;
+            min-width: 0 !important;
+            flex-grow: 1 !important;
+        }
+        
+        /* Điều chỉnh nút bấm gọn hơn trên mobile */
+        .stButton>button {
+            height: 34px !important;
+            font-size: 0.75rem !important;
+            padding: 0 !important;
+        }
+        
+        /* Giảm kích cỡ Metric trên mobile */
+        div[data-testid="stMetricValue"] {
+            font-size: 0.95rem !important;
+        }
+        div[data-testid="stMetricLabel"] > label {
+            font-size: 0.7rem !important;
+        }
+        div[data-testid="stMetricValue"] + div {
+            font-size: 0.7rem !important;
         }
     }
 </style>
