@@ -13,6 +13,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 import os
 import sys
@@ -50,7 +51,7 @@ st.markdown("""
         background-color: #FFFFFF !important;
         color: #212121 !important;
     }
-    
+
     /* Khung nhập liệu và lựa chọn */
     div[data-baseweb="input"] {
         background-color: #F5F5F5 !important;
@@ -58,18 +59,18 @@ st.markdown("""
         border: 1px solid #E0E0E0 !important;
         border-radius: 8px !important;
     }
-    
+
     div[data-baseweb="select"] {
         background-color: #F5F5F5 !important;
         color: #212121 !important;
         border-radius: 8px !important;
     }
-    
+
     /* Thiết lập lại màu chữ cho toàn bộ văn bản */
     label, p, span, h1, h2, h3, h4, h5, h6, small {
         color: #212121 !important;
     }
-    
+
     /* Điều chỉnh khoảng cách hiển thị tối ưu di động */
     .block-container {
         padding-top: 1rem;
@@ -77,7 +78,7 @@ st.markdown("""
         padding-left: 1rem;
         padding-right: 1rem;
     }
-    
+
     /* Nút bấm Cập Nhật nổi bật, màu xanh lá */
     .stButton>button {
         width: 100%;
@@ -92,7 +93,7 @@ st.markdown("""
         background-color: #1B5E20 !important;
         color: #FFFFFF !important;
     }
-    
+
     /* Tiêu đề ứng dụng */
     .main-title {
         font-size: 1.8rem;
@@ -107,14 +108,14 @@ st.markdown("""
         color: #666666 !important;
         margin-bottom: 1.2rem;
     }
-    
+
     /* Thẻ metric */
     div[data-testid="stMetricValue"] {
         font-size: 1.6rem !important;
         font-weight: 700 !important;
         color: #1B5E20 !important;
     }
-    
+
     /* Tự động co giãn chiều cao biểu đồ: 420px cho mobile, 580px cho desktop */
     .stPlotlyChart {
         height: 580px !important;
@@ -147,9 +148,9 @@ with col_tf:
     else:
         tf_options = ["D (Hàng Ngày)", "H1 (1 Giờ)"]
         default_tf_idx = 1 # Mặc định H1
-        
+
     timeframe = st.selectbox("📅 Khung thời gian:", options=tf_options, index=default_tf_idx)
-    
+
     # Trích xuất mã khung thời gian
     if "H1" in timeframe:
         tf_code = "1H"
@@ -167,7 +168,7 @@ with col_range:
     else:
         range_options = ["12 Tháng", "6 Tháng", "3 Tháng"]
         default_range_idx = 0 # Mặc định 12 Tháng
-        
+
     display_range = st.selectbox("🔍 Phạm vi hiển thị:", options=range_options, index=default_range_idx)
 
 with col_btn:
@@ -179,7 +180,7 @@ with col_btn:
 # Cấu hình nâng cao rút gọn trong Expander
 with st.expander("⚙️ Thiết Lập Chỉ Báo (VWAP & ZigZag)"):
     st.write("Thay đổi các tham số tính toán của chỉ báo kỹ thuật:")
-    
+
     col_v1, col_v2 = st.columns(2)
     with col_v1:
         price_source = st.selectbox(
@@ -189,6 +190,7 @@ with st.expander("⚙️ Thiết Lập Chỉ Báo (VWAP & ZigZag)"):
         )
         break_lines = st.checkbox("Ngắt kết nối ranh giới kỳ (MQL5 Style)", value=True)
         skip_last_bar = st.checkbox("Ẩn VWAP ở nến hiện tại (Forming Bar)", value=True)
+        show_hover = st.checkbox("Hiển thị khung thông số trên biểu đồ (Hover Info)", value=False)
     with col_v2:
         st.write("Đường VWAP hiển thị:")
         show_vwap_day = st.checkbox("VWAP 1 Ngày (Session) - Chỉ hỗ trợ Intraday", value=(tf_code in ["1H", "15m", "5m"]))
@@ -196,9 +198,9 @@ with st.expander("⚙️ Thiết Lập Chỉ Báo (VWAP & ZigZag)"):
         show_vwap_month = st.checkbox("VWAP 1 Tháng", value=True)
         show_vwap_quarter = st.checkbox("VWAP Quý (3 Tháng)", value=True)
         show_vwap_year = st.checkbox("VWAP 12 Tháng (Năm)", value=True)
-        
+
     st.divider()
-    
+
     col_z1, col_z2 = st.columns(2)
     with col_z1:
         show_zigzag = st.checkbox("Hiển thị chỉ báo ZigZag", value=True)
@@ -214,14 +216,14 @@ if selected_stock:
         result = fetch_stock_data(selected_stock, tf_code)
         df = result.get("df", pd.DataFrame())
         fetch_time = result.get("fetch_time", datetime.now())
-        
+
     if df.empty:
         st.warning("⚠️ Không tải được dữ liệu. Vui lòng kiểm tra lại mã cổ phiếu.")
     else:
         # --- Thông tin thẻ Metric ---
         last_row = df.iloc[-1]
         last_price = last_row['close'] * 1000  # Quy đổi về VND
-        
+
         # Định dạng thời gian cập nhật đúng yêu cầu giờ phút nếu có
         if tf_code in ["1H", "15m", "5m"]:
             # Hiển thị giờ phút đầy đủ cho Intraday
@@ -229,7 +231,7 @@ if selected_stock:
         else:
             # Chỉ hiển thị ngày cho Daily
             last_time = last_row['time'].strftime('%d/%m/%Y')
-            
+
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Mã Cổ Phiếu", selected_stock)
@@ -256,11 +258,11 @@ if selected_stock:
             df['vwap_Quarter'] = calculate_vwap(df, "Quarter", price_source, break_lines, skip_last_bar)
         if show_vwap_year:
             df['vwap_Year'] = calculate_vwap(df, "Year", price_source, break_lines, skip_last_bar)
-            
+
         # ZigZag
         if show_zigzag:
             df['zigzag'] = calculate_zigzag(df, zigzag_depth, zigzag_deviation, zigzag_backstep, zigzag_dev_type)
-            
+
         # --- Lọc dữ liệu hiển thị (Slice) theo yêu cầu người dùng ---
         last_date = df['time'].max()
         if tf_code in ["5m", "15m"]:
@@ -279,12 +281,17 @@ if selected_stock:
                 start_display = last_date - timedelta(days=90)
             else: # 12 Tháng
                 start_display = last_date - timedelta(days=365)
-            
+
         df_plot = df[df['time'] >= start_display].copy()
-            
-        # --- Khởi tạo Biểu đồ Plotly (Màn hình Trắng/Sáng) ---
-        fig = go.Figure()
-        
+
+        # --- Khởi tạo Biểu đồ Plotly với Subplots (Giá ở trên, Khối lượng ở dưới) ---
+        fig = make_subplots(
+            rows=2, cols=1,
+            shared_xaxes=True,
+            vertical_spacing=0.05,
+            row_heights=[0.75, 0.25]
+        )
+
         # 1. Đường giá Close chính (Đường màu xanh lá cây sẫm tăng độ tương phản trên nền trắng)
         fig.add_trace(go.Scatter(
             x=df_plot['time'],
@@ -293,17 +300,17 @@ if selected_stock:
             name='Giá Close',
             line=dict(color='#2E7D32', width=2.0),
             hovertemplate='%{x}<br>Giá Close: %{y:.2f}<extra></extra>'
-        ))
-        
-        # 2. Thêm các đường VWAP đứt nét, độ đậm vừa phải trên nền trắng
+        ), row=1, col=1)
+
+        # 2. Thêm các đường VWAP nét nhỏ chấm liên tục (dash='dot', width=1.0) trên nền trắng
         vwap_config = {
-            "Session/Day": dict(color='#1565C0', width=2.0, dash='solid', name='VWAP Ngày (Session)', col='vwap_Day'),
-            "Week": dict(color='#E65100', width=1.2, dash='dash', name='VWAP Tuần', col='vwap_Week'),
-            "Month": dict(color='#C62828', width=1.2, dash='dash', name='VWAP Tháng', col='vwap_Month'),
-            "Quarter": dict(color='#00838F', width=1.2, dash='dash', name='VWAP Quý', col='vwap_Quarter'),
-            "Year": dict(color='#6A1B9A', width=1.5, dash='dash', name='VWAP 12 Tháng', col='vwap_Year')
+            "Session/Day": dict(color='#1565C0', width=1.0, dash='dot', name='VWAP Ngày (Session)', col='vwap_Day'),
+            "Week": dict(color='#E65100', width=1.0, dash='dot', name='VWAP Tuần', col='vwap_Week'),
+            "Month": dict(color='#C62828', width=1.0, dash='dot', name='VWAP Tháng', col='vwap_Month'),
+            "Quarter": dict(color='#00838F', width=1.0, dash='dot', name='VWAP Quý', col='vwap_Quarter'),
+            "Year": dict(color='#6A1B9A', width=1.0, dash='dot', name='VWAP 12 Tháng', col='vwap_Year')
         }
-        
+
         for p_name, cfg in vwap_config.items():
             col_name = cfg['col']
             if col_name in df_plot.columns:
@@ -315,8 +322,8 @@ if selected_stock:
                     line=dict(color=cfg['color'], width=cfg['width'], dash=cfg['dash']),
                     connectgaps=False,  # Ngắt kết nối khi có giá trị NaN
                     hovertemplate=f'%{{x}}<br>{cfg["name"]}: %{{y:.2f}}<extra></extra>'
-                ))
-            
+                ), row=1, col=1)
+
         # 3. Thêm đường ZigZag: màu xám rất nhạt, nét đứt (chấm), không có dấu chấm tròn
         if show_zigzag and 'zigzag' in df_plot.columns:
             df_zz = df_plot.dropna(subset=['zigzag'])
@@ -327,15 +334,52 @@ if selected_stock:
                     mode='lines',
                     name='ZigZag',
                     # Line màu xám nhạt, kiểu chấm (dot), độ rộng 1.2
-                    line=dict(color='#CCCCCC', width=1.2, dash='dot'),
+                    line=dict(color='#CCCCCC', width=1.0, dash='dot'),
                     hovertemplate='%{x}<br>Cực trị ZigZag: %{y:.2f}<extra></extra>'
-                ))
+                ), row=1, col=1)
+
+        # 4. Thêm phần Khối lượng bên dưới (row 2)
+        # Định nghĩa màu sắc cho cột khối lượng (xanh nếu tăng, đỏ nếu giảm so với giá mở cửa của nến đó)
+        vol_colors = np.where(df_plot['close'] >= df_plot['open'], '#2E7D32', '#C62828')
+        fig.add_trace(go.Bar(
+            x=df_plot['time'],
+            y=df_plot['volume'],
+            name='Khối lượng',
+            marker_color=vol_colors,
+            hovertemplate='%{x}<br>Khối lượng: %{y:,.0f}<extra></extra>'
+        ), row=2, col=1)
 
         # Cấu hình rangebreaks để ẩn các ngày nghỉ cuối tuần, giờ nghỉ đêm và nghỉ trưa
         rbreaks = [dict(bounds=["sat", "mon"])]
         if tf_code in ["1H", "15m", "5m"]:
-            rbreaks.append(dict(bounds=[15.0, 8.5], pattern="hour"))      # Đêm: 15h00 đến 08h30 sáng hôm sau
-            rbreaks.append(dict(bounds=[11.6, 12.9], pattern="hour"))   # Trưa: 11h36 đến 12h54 trưa cùng ngày
+            rbreaks.append(dict(bounds=[14.75, 8.5], pattern="hour"))      # Đêm: 15h00 đến 08h30 sáng hôm sau
+            rbreaks.append(dict(bounds=[11.5 , 13], pattern="hour"))   # Trưa: 11h36 đến 12h54 trưa cùng ngày
+
+        # --- Cấu hình trục X cho toàn bộ subplots ---
+        fig.update_xaxes(
+            type='date',
+            rangebreaks=rbreaks,
+            gridcolor='#EAEAEA',
+            tickfont=dict(color='#212121'),
+            rangeslider=dict(visible=False)
+        )
+
+        # --- Cấu hình các trục Y tương ứng ---
+        fig.update_yaxes(
+            row=1, col=1,
+            title=dict(text="Giá (nghìn VNĐ)", font=dict(color='#212121')),
+            tickfont=dict(color='#212121'),
+            side="right", # Đặt trục giá bên phải giống TradingView
+            gridcolor='#EAEAEA'
+        )
+
+        fig.update_yaxes(
+            row=2, col=1,
+            title=dict(text="Khối lượng", font=dict(color='#212121')),
+            tickfont=dict(color='#212121'),
+            side="right",
+            gridcolor='#EAEAEA'
+        )
 
         # --- Định cấu hình Layout Nền Trắng (plotly_white) ---
         fig.update_layout(
@@ -344,20 +388,6 @@ if selected_stock:
             title=dict(
                 text=f"Biểu đồ phân tích kỹ thuật {selected_stock} ({tf_code}) - Lịch sử {display_range}",
                 font=dict(size=16, color='#212121')
-            ),
-            xaxis=dict(
-                title=dict(text="Thời gian", font=dict(color='#212121')),
-                tickfont=dict(color='#212121'),
-                gridcolor='#EAEAEA',
-                rangeslider=dict(visible=False), # Tắt slider dưới chân cho gọn màn hình di động
-                type='date',
-                rangebreaks=rbreaks
-            ),
-            yaxis=dict(
-                title=dict(text="Giá (nghìn VNĐ)", font=dict(color='#212121')),
-                tickfont=dict(color='#212121'),
-                side="right", # Đặt trục giá bên phải giống TradingView
-                gridcolor='#EAEAEA'
             ),
             legend=dict(
                 orientation="h",
@@ -368,21 +398,14 @@ if selected_stock:
                 font=dict(size=10, color='#212121')
             ),
             margin=dict(l=10, r=10, t=80, b=10),
-            hovermode="x unified",
+            hovermode="x unified" if show_hover else False,
             paper_bgcolor="#FFFFFF",
             plot_bgcolor="#FFFFFF"
         )
-        
+
         # Hiển thị đồ thị co giãn tự động theo chiều ngang, cấu hình tắt hoàn toàn các thanh bar và zoom
         st.plotly_chart(
-            fig, 
-            use_container_width=True, 
+            fig,
+            use_container_width=True,
             config={'displayModeBar': False, 'scrollZoom': False, 'doubleClick': False}
         )
-
-        # --- Chân trang chú thích sử dụng ---
-        st.markdown("""
-        *   **Cập nhật**: Bấm nút **[🔄 Cập Nhật]** ở trên cùng để tải lại dữ liệu mới nhất (được lưu cache tối đa 5 phút để tránh quá tải API).
-        *   **Độ trễ**: Dữ liệu lịch sử miễn phí từ `vnstock` có độ trễ nhất định so với thời gian thực từ 1 - 15 phút.
-        *   **Không vẽ nến cuối**: Các đường VWAP tự động ẩn giá trị tại nến đang chạy cuối cùng để tránh bị nhiễu vẽ lại (repaint).
-        """)
