@@ -406,6 +406,6 @@ if selected_stock:
         # Hiển thị đồ thị co giãn tự động theo chiều ngang, cấu hình tắt hoàn toàn các thanh bar và zoom
         st.plotly_chart(
             fig,
-            use_container_width=True,
+            width="stretch",
             config={'displayModeBar': False, 'scrollZoom': False, 'doubleClick': False}
         )
