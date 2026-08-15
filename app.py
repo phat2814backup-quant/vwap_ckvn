@@ -27,6 +27,7 @@ if current_dir not in sys.path:
 from data.fetch import fetch_stock_data
 from indicators.vwap import calculate_vwap
 from indicators.zigzag import calculate_zigzag
+from indicators.mbfx import calculate_mbfx
 
 # Thiết lập bảng mã UTF-8 cho stdout trên Windows
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
@@ -123,13 +124,13 @@ st.markdown("""
         color: #1B5E20 !important;
     }
 
-    /* Tự động co giãn chiều cao biểu đồ: 320px cho mobile, 520px cho desktop để không cần cuộn dọc trên web */
+    /* Tự động co giãn chiều cao biểu đồ: 380px cho mobile, 580px cho desktop để không cần cuộn dọc */
     .stPlotlyChart {
-        height: 520px !important;
+        height: 580px !important;
     }
     @media (max-width: 768px) {
         .stPlotlyChart {
-            height: 320px !important;
+            height: 380px !important;
         }
         
         /* Giảm padding tối đa trên mobile */
@@ -242,7 +243,7 @@ with col_btn:
         st.cache_data.clear()
 
 # Cấu hình nâng cao rút gọn trong Expander
-with st.expander("⚙️ Thiết Lập Chỉ Báo (VWAP & ZigZag)"):
+with st.expander("⚙️ Thiết Lập Chỉ Báo (VWAP, ZigZag & MBFX)"):
     st.write("Thay đổi các tham số tính toán của chỉ báo kỹ thuật:")
 
     col_v1, col_v2 = st.columns(2)
@@ -273,6 +274,15 @@ with st.expander("⚙️ Thiết Lập Chỉ Báo (VWAP & ZigZag)"):
         zigzag_deviation = st.number_input("Deviation (Sai số tối thiểu):", min_value=0.0, max_value=100.0, value=2.0, step=0.1)
         zigzag_dev_type = st.selectbox("Loại sai số (Deviation Type):", options=["Percent", "Absolute"], index=0)
         zigzag_backstep = st.number_input("Back Step:", min_value=1, max_value=50, value=3)
+
+    st.divider()
+
+    col_m1, col_m2 = st.columns(2)
+    with col_m1:
+        show_mbfx = st.checkbox("Hiển thị chỉ báo MBFX Timing", value=True)
+        mbfx_length = st.number_input("MBFX Length / Period:", min_value=1, max_value=100, value=7)
+    with col_m2:
+        mbfx_filter = st.number_input("MBFX Filter:", min_value=0.0, max_value=5.0, value=0.2, step=0.05)
 
 # Tải dữ liệu khi có mã cổ phiếu
 if selected_stock:
@@ -327,6 +337,10 @@ if selected_stock:
         if show_zigzag:
             df['zigzag'] = calculate_zigzag(df, zigzag_depth, zigzag_deviation, zigzag_backstep, zigzag_dev_type)
 
+        # MBFX Timing
+        if show_mbfx:
+            df['mbfx'], df['mbfx_color'] = calculate_mbfx(df, mbfx_length, mbfx_filter)
+
         # --- Lọc dữ liệu hiển thị (Slice) theo yêu cầu người dùng ---
         last_date = df['time'].max()
         if tf_code in ["5m", "15m"]:
@@ -354,13 +368,25 @@ if selected_stock:
         else:
             df_plot['time_str'] = df_plot['time'].dt.strftime('%d/%m/%Y')
 
-        # --- Khởi tạo Biểu đồ Plotly với Subplots (Giá ở trên, Khối lượng ở dưới) ---
-        fig = make_subplots(
-            rows=2, cols=1,
-            shared_xaxes=True,
-            vertical_spacing=0.05,
-            row_heights=[0.75, 0.25]
-        )
+        # --- Khởi tạo Biểu đồ Plotly với Subplots (Giá ở trên, Khối lượng và MBFX ở dưới tùy chọn) ---
+        if show_mbfx:
+            fig = make_subplots(
+                rows=3, cols=1,
+                shared_xaxes=True,
+                vertical_spacing=0.04,
+                row_heights=[0.60, 0.15, 0.25]
+            )
+            vol_row = 2
+            mbfx_row = 3
+        else:
+            fig = make_subplots(
+                rows=2, cols=1,
+                shared_xaxes=True,
+                vertical_spacing=0.05,
+                row_heights=[0.75, 0.25]
+            )
+            vol_row = 2
+            mbfx_row = None
 
         # 1. Đường giá Close chính (Đường màu xanh lá cây sẫm tăng độ tương phản trên nền trắng)
         fig.add_trace(go.Scatter(
@@ -409,7 +435,7 @@ if selected_stock:
                     hovertemplate='%{x}<br>Cực trị ZigZag: %{y:.2f}<extra></extra>'
                 ), row=1, col=1)
 
-        # 4. Thêm phần Khối lượng bên dưới (row 2)
+        # 4. Thêm phần Khối lượng bên dưới
         # Định nghĩa màu sắc cho cột khối lượng (xanh nếu tăng, đỏ nếu giảm so với giá mở cửa của nến đó)
         vol_colors = np.where(df_plot['close'] >= df_plot['open'], '#2E7D32', '#C62828')
         fig.add_trace(go.Bar(
@@ -418,7 +444,50 @@ if selected_stock:
             name='Khối lượng',
             marker_color=vol_colors,
             hovertemplate='%{x}<br>Khối lượng: %{y:,.0f}<extra></extra>'
-        ), row=2, col=1)
+        ), row=vol_row, col=1)
+
+        # 5. Thêm phần MBFX Timing bên dưới cùng (nếu được chọn)
+        if show_mbfx and 'mbfx' in df_plot.columns:
+            # Xác định màu sắc chấm tròn cho MBFX dựa trên ColorIdx: 0->Lime, 1->Red, 2->Gold
+            mbfx_colors = []
+            for c in df_plot['mbfx_color']:
+                if c == 0:
+                    mbfx_colors.append('#00E676')  # Lime
+                elif c == 1:
+                    mbfx_colors.append('#FF1744')  # Red
+                else:
+                    mbfx_colors.append('#FFC107')  # Gold
+
+            fig.add_trace(go.Scatter(
+                x=df_plot['time_str'],
+                y=df_plot['mbfx'],
+                mode='lines+markers',
+                name='MBFX Timing',
+                line=dict(color='#9E9E9E', width=1.5),
+                marker=dict(color=mbfx_colors, size=5),
+                hovertemplate='%{x}<br>MBFX: %{y:.2f}<extra></extra>'
+            ), row=mbfx_row, col=1)
+
+            # Thêm các đường ranh giới 20 và 80 cho MBFX
+            fig.add_trace(go.Scatter(
+                x=df_plot['time_str'],
+                y=[20] * len(df_plot),
+                mode='lines',
+                name='Oversold (20)',
+                line=dict(color='#757575', width=1.0, dash='dash'),
+                showlegend=False,
+                hoverinfo='skip'
+            ), row=mbfx_row, col=1)
+
+            fig.add_trace(go.Scatter(
+                x=df_plot['time_str'],
+                y=[80] * len(df_plot),
+                mode='lines',
+                name='Overbought (80)',
+                line=dict(color='#757575', width=1.0, dash='dash'),
+                showlegend=False,
+                hoverinfo='skip'
+            ), row=mbfx_row, col=1)
 
         # --- Cấu hình trục X cho toàn bộ subplots ---
         fig.update_xaxes(
@@ -441,12 +510,22 @@ if selected_stock:
         )
 
         fig.update_yaxes(
-            row=2, col=1,
+            row=vol_row, col=1,
             title=dict(text="Khối lượng", font=dict(color='#212121')),
             tickfont=dict(color='#212121'),
             side="right",
             gridcolor='#EAEAEA'
         )
+
+        if show_mbfx:
+            fig.update_yaxes(
+                row=mbfx_row, col=1,
+                title=dict(text="MBFX Timing", font=dict(color='#212121')),
+                tickfont=dict(color='#212121'),
+                side="right",
+                gridcolor='#EAEAEA',
+                range=[0, 100]
+            )
 
         # --- Định cấu hình Layout Nền Trắng (plotly_white) ---
         fig.update_layout(
