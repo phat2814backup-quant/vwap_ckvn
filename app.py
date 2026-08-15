@@ -296,7 +296,15 @@ if selected_stock:
     else:
         # --- Thông tin thẻ Metric ---
         last_row = df.iloc[-1]
-        last_price = last_row['close'] * 1000  # Quy đổi về VND
+        
+        # Xác định đơn vị và giá trị hiển thị dựa trên mã (chỉ số/phái sinh vs cổ phiếu thường)
+        is_index_or_future = any(x in selected_stock for x in ["INDEX", "VN30", "HNX", "UPCOM"]) or selected_stock.startswith("VN30F")
+        if is_index_or_future:
+            last_price = last_row['close']
+            price_display = f"{last_price:,.2f} điểm"
+        else:
+            last_price = last_row['close'] * 1000  # Quy đổi về VND
+            price_display = f"{last_price:,.0f} đ"
 
         # Định dạng thời gian cập nhật đúng yêu cầu giờ phút nếu có
         if tf_code in ["1H", "15m", "5m"]:
@@ -310,7 +318,7 @@ if selected_stock:
         with col1:
             st.metric("Mã Cổ Phiếu", selected_stock)
         with col2:
-            st.metric("Giá Hiện Tại", f"{last_price:,.0f} đ")
+            st.metric("Giá Hiện Tại", price_display)
         with col3:
             # Hiển thị thời gian nạp dữ liệu thành công từ API để tránh hiểu nhầm
             st.metric(
@@ -520,19 +528,15 @@ if selected_stock:
         fig.update_layout(
             template='plotly_white',
             dragmode=False, # Tắt zoom/pan kéo thả bằng tay trên màn hình điện thoại để tránh bị kẹt trang
-            title=dict(
-                text=f"Biểu đồ phân tích kỹ thuật {selected_stock} ({tf_code}) - Lịch sử {display_range}",
-                font=dict(size=16, color='#212121')
-            ),
             legend=dict(
                 orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1,
+                yanchor="top",
+                y=-0.15,
+                xanchor="center",
+                x=0.5,
                 font=dict(size=10, color='#212121')
             ),
-            margin=dict(l=10, r=10, t=80, b=10),
+            margin=dict(l=10, r=10, t=20, b=50),
             hovermode="x unified" if show_hover else False,
             paper_bgcolor="#FFFFFF",
             plot_bgcolor="#FFFFFF"
