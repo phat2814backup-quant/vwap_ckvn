@@ -46,6 +46,12 @@ st.set_page_config(
 # Thêm CSS tùy chỉnh ép nền trắng, chữ đen và tự co giãn chiều cao biểu đồ theo thiết bị
 st.markdown("""
 <style>
+    /* Ngăn chặn cuộn ngang toàn cục cho toàn bộ trang */
+    html, body, [data-testid="stAppViewContainer"], .stApp, .block-container {
+        overflow-x: hidden !important;
+        max-width: 100vw !important;
+    }
+
     /* Ép Streamlit dùng nền trắng và chữ tối màu */
     .stApp {
         background-color: #FFFFFF !important;
@@ -74,8 +80,8 @@ st.markdown("""
     /* Điều chỉnh khoảng cách hiển thị tối ưu di động */
     .block-container {
         max-width: 100% !important;
-        padding-top: 1rem !important;
-        padding-bottom: 1rem !important;
+        padding-top: 0.8rem !important;
+        padding-bottom: 0.8rem !important;
         padding-left: 1rem !important;
         padding-right: 1rem !important;
     }
@@ -107,7 +113,7 @@ st.markdown("""
         font-size: 0.9rem;
         text-align: center;
         color: #666666 !important;
-        margin-bottom: 1.2rem;
+        margin-bottom: 1rem;
     }
 
     /* Thẻ metric */
@@ -117,62 +123,70 @@ st.markdown("""
         color: #1B5E20 !important;
     }
 
-    /* Tự động co giãn chiều cao biểu đồ: 350px cho mobile, 680px cho desktop */
+    /* Tự động co giãn chiều cao biểu đồ: 320px cho mobile, 520px cho desktop để không cần cuộn dọc trên web */
     .stPlotlyChart {
-        height: 680px !important;
+        height: 520px !important;
     }
     @media (max-width: 768px) {
         .stPlotlyChart {
-            height: 350px !important;
+            height: 320px !important;
         }
         
-        /* Giảm padding để tiết kiệm diện tích trên mobile */
+        /* Giảm padding tối đa trên mobile */
         .block-container {
-            padding-top: 0.3rem !important;
-            padding-bottom: 0.3rem !important;
+            padding-top: 0.2rem !important;
+            padding-bottom: 0.2rem !important;
             padding-left: 0.4rem !important;
             padding-right: 0.4rem !important;
         }
         
         .main-title {
-            font-size: 1.2rem !important;
-            margin-bottom: 0.1rem !important;
+            font-size: 1.15rem !important;
+            margin-bottom: 0.05rem !important;
         }
         
         .sub-title {
-            font-size: 0.7rem !important;
-            margin-bottom: 0.4rem !important;
+            font-size: 0.68rem !important;
+            margin-bottom: 0.3rem !important;
         }
         
-        /* Giữ các cột của st.columns nằm hàng ngang trên mobile thay vì xếp chồng đứng */
+        /* Giữ các cột của st.columns linh hoạt trên mobile */
         div[data-testid="stHorizontalBlock"] {
             flex-direction: row !important;
-            flex-wrap: nowrap !important;
-            gap: 4px !important;
+            flex-wrap: wrap !important;
+            gap: 6px !important;
         }
         
-        div[data-testid="column"] {
-            width: unset !important;
-            min-width: 0 !important;
-            flex-grow: 1 !important;
+        /* Đối với các ô cấu hình (Symbol, TF, Range, Button): xếp thành lưới 2x2 để không tràn ngang */
+        div[data-testid="column"]:has(div[data-baseweb="input"]),
+        div[data-testid="column"]:has(div[data-baseweb="select"]),
+        div[data-testid="column"]:has(button) {
+            min-width: 45% !important;
+            flex: 1 1 45% !important;
+        }
+        
+        /* Đối với 3 ô hiển thị Metrics: vẫn nằm thẳng hàng trên 1 hàng ngang (3 cột) */
+        div[data-testid="column"]:has(div[data-testid="stMetricValue"]) {
+            min-width: 30% !important;
+            flex: 1 1 30% !important;
         }
         
         /* Điều chỉnh nút bấm gọn hơn trên mobile */
         .stButton>button {
             height: 34px !important;
-            font-size: 0.75rem !important;
+            font-size: 0.72rem !important;
             padding: 0 !important;
         }
         
         /* Giảm kích cỡ Metric trên mobile */
         div[data-testid="stMetricValue"] {
-            font-size: 0.95rem !important;
+            font-size: 0.9rem !important;
         }
         div[data-testid="stMetricLabel"] > label {
-            font-size: 0.7rem !important;
+            font-size: 0.65rem !important;
         }
         div[data-testid="stMetricValue"] + div {
-            font-size: 0.7rem !important;
+            font-size: 0.65rem !important;
         }
     }
 </style>
