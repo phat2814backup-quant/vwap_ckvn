@@ -73,10 +73,11 @@ st.markdown("""
 
     /* Điều chỉnh khoảng cách hiển thị tối ưu di động */
     .block-container {
-        padding-top: 1rem;
-        padding-bottom: 1rem;
-        padding-left: 1rem;
-        padding-right: 1rem;
+        max-width: 100% !important;
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
     }
 
     /* Nút bấm Cập Nhật nổi bật, màu xanh lá */
@@ -116,13 +117,13 @@ st.markdown("""
         color: #1B5E20 !important;
     }
 
-    /* Tự động co giãn chiều cao biểu đồ: 420px cho mobile, 580px cho desktop */
+    /* Tự động co giãn chiều cao biểu đồ: 480px cho mobile, 680px cho desktop */
     .stPlotlyChart {
-        height: 580px !important;
+        height: 680px !important;
     }
     @media (max-width: 768px) {
         .stPlotlyChart {
-            height: 420px !important;
+            height: 480px !important;
         }
     }
 </style>
@@ -299,6 +300,7 @@ if selected_stock:
             mode='lines',
             name='Giá Close',
             line=dict(color='#2E7D32', width=2.0),
+            connectgaps=True,
             hovertemplate='%{x}<br>Giá Close: %{y:.2f}<extra></extra>'
         ), row=1, col=1)
 
@@ -352,8 +354,8 @@ if selected_stock:
         # Cấu hình rangebreaks để ẩn các ngày nghỉ cuối tuần, giờ nghỉ đêm và nghỉ trưa
         rbreaks = [dict(bounds=["sat", "mon"])]
         if tf_code in ["1H", "15m", "5m"]:
-            rbreaks.append(dict(bounds=[14.75, 8.5], pattern="hour"))      # Đêm: 15h00 đến 08h30 sáng hôm sau
-            rbreaks.append(dict(bounds=[11.5 , 13], pattern="hour"))   # Trưa: 11h36 đến 12h54 trưa cùng ngày
+            rbreaks.append(dict(bounds=[14.75, 9.0], pattern="hour"))      # Đêm: 14h45 đến 09h00 sáng hôm sau
+            rbreaks.append(dict(bounds=[11.5 , 13.0], pattern="hour"))   # Trưa: 11h30 đến 13h00 trưa cùng ngày
 
         # --- Cấu hình trục X cho toàn bộ subplots ---
         fig.update_xaxes(
