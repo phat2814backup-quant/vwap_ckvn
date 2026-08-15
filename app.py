@@ -348,6 +348,12 @@ if selected_stock:
 
         df_plot = df[df['time'] >= start_display].copy()
 
+        # Định dạng thời gian cho trục hoành (Category axis) để tránh khoảng trắng cuối tuần/lễ/đêm
+        if tf_code in ["5m", "15m", "1H"]:
+            df_plot['time_str'] = df_plot['time'].dt.strftime('%d/%m %H:%M')
+        else:
+            df_plot['time_str'] = df_plot['time'].dt.strftime('%d/%m/%Y')
+
         # --- Khởi tạo Biểu đồ Plotly với Subplots (Giá ở trên, Khối lượng ở dưới) ---
         fig = make_subplots(
             rows=2, cols=1,
@@ -358,7 +364,7 @@ if selected_stock:
 
         # 1. Đường giá Close chính (Đường màu xanh lá cây sẫm tăng độ tương phản trên nền trắng)
         fig.add_trace(go.Scatter(
-            x=df_plot['time'],
+            x=df_plot['time_str'],
             y=df_plot['close'],
             mode='lines',
             name='Giá Close',
@@ -380,7 +386,7 @@ if selected_stock:
             col_name = cfg['col']
             if col_name in df_plot.columns:
                 fig.add_trace(go.Scatter(
-                    x=df_plot['time'],
+                    x=df_plot['time_str'],
                     y=df_plot[col_name],
                     mode='lines',
                     name=cfg['name'],
@@ -394,7 +400,7 @@ if selected_stock:
             df_zz = df_plot.dropna(subset=['zigzag'])
             if not df_zz.empty:
                 fig.add_trace(go.Scatter(
-                    x=df_zz['time'],
+                    x=df_zz['time_str'],
                     y=df_zz['zigzag'],
                     mode='lines',
                     name='ZigZag',
@@ -407,23 +413,19 @@ if selected_stock:
         # Định nghĩa màu sắc cho cột khối lượng (xanh nếu tăng, đỏ nếu giảm so với giá mở cửa của nến đó)
         vol_colors = np.where(df_plot['close'] >= df_plot['open'], '#2E7D32', '#C62828')
         fig.add_trace(go.Bar(
-            x=df_plot['time'],
+            x=df_plot['time_str'],
             y=df_plot['volume'],
             name='Khối lượng',
             marker_color=vol_colors,
             hovertemplate='%{x}<br>Khối lượng: %{y:,.0f}<extra></extra>'
         ), row=2, col=1)
 
-        # Cấu hình rangebreaks để ẩn các ngày nghỉ cuối tuần, giờ nghỉ đêm và nghỉ trưa
-        rbreaks = [dict(bounds=["sat", "mon"])]
-        if tf_code in ["1H", "15m", "5m"]:
-            rbreaks.append(dict(bounds=[14.75, 9.0], pattern="hour"))      # Đêm: 14h45 đến 09h00 sáng hôm sau
-            rbreaks.append(dict(bounds=[11.5 , 13.0], pattern="hour"))   # Trưa: 11h30 đến 13h00 trưa cùng ngày
-
         # --- Cấu hình trục X cho toàn bộ subplots ---
         fig.update_xaxes(
-            type='date',
-            rangebreaks=rbreaks,
+            type='category',
+            tickmode='auto',
+            nticks=8,  # Giới hạn số lượng tick hiển thị
+            tickangle=0,
             gridcolor='#EAEAEA',
             tickfont=dict(color='#212121'),
             rangeslider=dict(visible=False)
